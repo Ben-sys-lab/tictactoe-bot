@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Крестики-нолики</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; overflow: hidden;
+    font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
+    background: var(--tg-theme-bg-color, #0f1724);
+    color: var(--tg-theme-text-color, #fff);
+  }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(79,195,247,.18), transparent 45%),
+      radial-gradient(circle at 80% 80%, rgba(255,138,128,.18), transparent 45%),
+      var(--tg-theme-bg-color, #0f1724);
+  }
+  .container { width: 100%; max-width: 360px; text-align: center; position: relative; }
+
+  /* ---------- Header ---------- */
+  h1 {
+    font-size: 26px; font-weight: 800; letter-spacing: -.5px;
+    background: linear-gradient(135deg, #4fc3f7 0%, #ff8a80 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+  }
+  .subtitle { opacity: .6; font-size: 14px; margin-bottom: 22px; }
+
+  /* ---------- Board ---------- */
+  .board {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 10px; margin: 0 auto 18px;
+    padding: 12px; border-radius: 20px;
+    background: rgba(255,255,255,.04);
+    box-shadow: 0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .cell {
+    aspect-ratio: 1;
+    background: linear-gradient(160deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 46px; font-weight: 800;
+    cursor: pointer;
+    user-select: none;
+    transition: transform .15s ease, background .25s ease, box-shadow .25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .cell:active:not(.filled) { transform: scale(.93); background: rgba(255,255,255,.14); }
+  .cell.filled { cursor: default; }
+  .cell.x {
+    color: #4fc3f7;
+    text-shadow: 0 0 20px rgba(79,195,247,.6);
+    animation: pop .3s cubic-bezier(.34,1.56,.64,1);
+  }
+  .cell.o {
+    color: #ff8a80;
+    text-shadow: 0 0 20px rgba(255,138,128,.6);
+    animation: pop .3s cubic-bezier(.34,1.56,.64,1);
+  }
+  .cell.win {
+    background: linear-gradient(160deg, #2e7d32, #1b5e20) !important;
+    box-shadow: 0 0 24px rgba(76,175,80,.7);
+    animation: winPulse .8s ease-in-out infinite alternate;
+  }
+  @keyframes pop {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+  @keyframes winPulse {
+    from { box-shadow: 0 0 16px rgba(76,175,80,.5); }
+    to   { box-shadow: 0 0 32px rgba(76,175,80,.95); }
+  }
+
+  /* ---------- Status ---------- */
+  .status {
+    font-size: 16px; font-weight: 600; margin: 8px 0 4px; min-height: 24px;
+    opacity: .95;
+  }
+  .status.win  { color: #66bb6a; }
+  .status.lose { color: #ef5350; }
+  .status.draw { color: #ffca28; }
+
+  /* ---------- Buttons ---------- */
+  button.primary {
+    width: 100%; padding: 16px 20px; font-size: 17px; font-weight: 700;
+    border: none; border-radius: 16px;
+    background: linear-gradient(135deg, #4fc3f7, #2979ff);
+    color: #fff; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(41,121,255,.4);
+    transition: transform .1s ease, box-shadow .2s ease;
+    margin-top: 4px;
+  }
+  button.primary:active {
+    transform: scale(.97);
+    box-shadow: 0 4px 12px rgba(41,121,255,.5);
+  }
+
+  /* ---------- Pay screen ---------- */
+  .hidden { display: none !important; }
+  .card-box {
+    background: linear-gradient(135deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
+    border-radius: 20px; padding: 22px 18px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.08);
+    text-align: left;
+  }
+  .price {
+    font-size: 40px; font-weight: 900; text-align: center;
+    background: linear-gradient(135deg, #4fc3f7 0%, #ff8a80 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 4px 0 18px;
+  }
+  .req-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    font-size: 14px;
+  }
+  .req-row:last-child { border-bottom: none; }
+  .req-label { opacity: .6; }
+  .req-value { font-weight: 700; font-family: ui-monospace, 'Courier New', monospace; }
+  .copy-hint { font-size: 12px; opacity: .5; text-align: center; margin-top: 14px; }
+
+  /* ---------- Confetti ---------- */
+  .confetti {
+    position: fixed; width: 10px; height: 10px;
+    top: -20px; opacity: 0.9; pointer-events: none;
+    animation: fall linear forwards;
+    z-index: 9999;
+  }
+  @keyframes fall {
+    to { transform: translateY(105vh) rotate(720deg); opacity: 0; }
+  }
+
+  /* ---------- Fade in ---------- */
+  .fade-in { animation: fadeIn .4s ease; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ЭКРАН ИГРЫ -->
+  <div id="play-screen" class="fade-in">
+    <h1>Крестики-нолики</h1>
+    <div class="subtitle">Ты — ❌ · Бот — ⭕</div>
+    <div class="board" id="board"></div>
+    <div class="status" id="status">Твой ход</div>
+  </div>
+
+  <!-- ЭКРАН ОПЛАТЫ -->
+  <div id="pay-screen" class="hidden">
+    <h1>Игра окончена</h1>
+    <p class="subtitle" style="margin-top:10px;">Хочешь сыграть ещё раз?</p>
+    <div class="card-box">
+      <div class="price">15 ₽</div>
+
+      <div class="req-row">
+        <span class="req-label">Карта</span>
+        <span class="req-value" id="card-number">—</span>
+      </div>
+      <div class="req-row">
+        <span class="req-label">Получатель</span>
+        <span class="req-value" id="card-holder">—</span>
+      </div>
+      <div class="req-row">
+        <span class="req-label">Банк</span>
+        <span class="req-value" id="bank-name">—</span>
+      </div>
+
+      <div class="copy-hint">Нажми на номер карты, чтобы скопировать</div>
+    </div>
+
+    <button class="primary" id="pay-btn" style="margin-top:18px;">
+      Я оплатил · Отправить на проверку
+    </button>
+    <p style="opacity:.55; font-size:13px; margin-top:14px; line-height:1.4;">
+      После перевода нажми кнопку выше. Админ проверит поступление и откроет доступ.
+    </p>
+  </div>
+
+</div>
+
+<script>
+/* ================== НАСТРОЙКИ ================== */
+const BOT_USERNAME = '8737526387:AAFia77yGJI0eRzMq7_M9Hzm8aSy0Yl332g'; // ← ЗАМЕНИ на username бота (без @)
+const CARD_NUMBER  = '0000 0000 0000 0000'; // ← ЗАМЕНИ
+const CARD_HOLDER  = 'Банк ВТБ';          // ← ЗАМЕНИ
+const BANK_NAME    = 'Название банка';       // ← ЗАМЕНИ
+/* =============================================== */
+
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); tg.disableVerticalSwipes?.(); }
+
+const user = tg?.initDataUnsafe?.user ?? {};
+const userId = user.id ?? 'guest';
+const KEY = 'tn_plays_' + userId;
+
+let board = Array(9).fill('');
+let gameOver = false;
+let plays = 0;
+
+/* ---------- storage (CloudStorage + localStorage fallback) ---------- */
+function getPlays(cb) {
+  if (tg?.CloudStorage) {
+    tg.CloudStorage.getItem(KEY, (err, val) => {
+      if (err || val == null) cb(parseInt(localStorage.getItem(KEY) || '0'));
+      else cb(parseInt(val));
+    });
+  } else cb(parseInt(localStorage.getItem(KEY) || '0'));
+}
+function setPlays(n, cb) {
+  localStorage.setItem(KEY, n);
+  if (tg?.CloudStorage) tg.CloudStorage.setItem(KEY, String(n), () => cb && cb());
+  else cb && cb();
+}
+
+/* ---------- AI: unbeatable minimax ---------- */
+const WIN_LINES = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+function winner(b) {
+  for (const [a,c,d] of WIN_LINES)
+    if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a];
+  return b.includes('') ? null : 'draw';
+}
+function minimax(b, depth, isMax) {
+  const w = winner(b);
+  if (w === 'O') return 10 - depth;
+  if (w === 'X') return depth - 10;
+  if (w === 'draw') return 0;
+  if (isMax) {
+    let best = -Infinity;
+    for (let i = 0; i < 9; i++) if (!b[i]) {
+      b[i] = 'O'; best = Math.max(best, minimax(b, depth + 1, false)); b[i] = '';
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (let i = 0; i < 9; i++) if (!b[i]) {
+      b[i] = 'X'; best = Math.min(best, minimax(b, depth + 1, true)); b[i] = '';
+    }
+    return best;
+  }
+}
+function bestMove(b) {
+  let best = -Infinity, move = -1;
+  for (let i = 0; i < 9; i++) if (!b[i]) {
+    b[i] = 'O';
+    const s = minimax(b, 0, false);
+    b[i] = '';
+    if (s > best) { best = s; move = i; }
+  }
+  return move;
+}
+
+/* ---------- UI ---------- */
+const boardEl   = document.getElementById('board');
+const statusEl  = document.getElementById('status');
+const playScreen= document.getElementById('play-screen');
+const payScreen = document.getElementById('pay-screen');
+
+document.getElementById('card-number').textContent = CARD_NUMBER;
+document.getElementById('card-holder').textContent = CARD_HOLDER;
+document.getElementById('bank-name').textContent   = BANK_NAME;
+
+document.getElementById('card-number').onclick = () => {
+  navigator.clipboard?.writeText(CARD_NUMBER.replace(/\s/g, ''));
+  tg?.showPopup?.({ message: 'Номер карты скопирован' });
+};
+
+function renderBoard() {
+  boardEl.innerHTML = '';
+  board.forEach((v, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (v ? ' filled ' + v.toLowerCase() : '');
+    cell.textContent = v === 'X' ? '✕' : v === 'O' ? '○' : '';
+    if (!v && !gameOver) cell.onclick = () => onCellClick(i);
+    boardEl.appendChild(cell);
+  });
+}
+function highlightWin(line) {
+  const cells = boardEl.children;
+  line.forEach(i => cells[i].classList.add('win'));
+}
+function onCellClick(i) {
+  if (gameOver || board[i]) return;
+  board[i] = 'X';
+  renderBoard();
+  let w = winner(board);
+  if (w) return endGame(w);
+
+  statusEl.textContent = 'Бот думает…';
+  statusEl.className = 'status';
+  setTimeout(() => {
+    const m = bestMove(board);
+    if (m >= 0) { board[m] = 'O'; renderBoard(); }
+    w = winner(board);
+    if (w) return endGame(w);
+    statusEl.textContent = 'Твой ход';
+    statusEl.className = 'status';
+  }, 300);
+}
+function endGame(result) {
+  gameOver = true;
+  let statusText = '';
+  let statusClass = 'status';
+
+  if (result === 'O') {
+    for (const line of WIN_LINES) {
+      const [a,b,c] = line;
+      if (board[a] && board[a] === board[b] && board[a] === board[c]) highlightWin(line);
+    }
+    statusText = 'Бот выиграл 😈';
+    statusClass = 'status lose';
+  } else if (result === 'draw') {
+    statusText = 'Ничья 🤝';
+    statusClass = 'status draw';
+    spawnConfetti();
+  } else {
+    statusText = 'Победа! 🎉';
+    statusClass = 'status win';
+    spawnConfetti();
+  }
+  statusEl.textContent = statusText;
+  statusEl.className = statusClass;
+
+  plays += 1;
+  setPlays(plays, () => setTimeout(showPayScreen, 1800));
+}
+function spawnConfetti() {
+  const colors = ['#4fc3f7', '#ff8a80', '#ffca28', '#66bb6a', '#ba68c8'];
+  for (let i = 0; i < 60; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.background = colors[Math.floor(Math.random() * colors.length)];
+    c.style.animationDuration = (1.8 + Math.random() * 1.5) + 's';
+    c.style.animationDelay = (Math.random() * 0.4) + 's';
+    c.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 4000);
+  }
+}
+function showPayScreen() {
+  playScreen.classList.add('hidden');
+  payScreen.classList.remove('hidden');
+  payScreen.classList.add('fade-in');
+}
+function showPlayScreen() {
+  payScreen.classList.add('hidden');
+  playScreen.classList.remove('hidden');
+  playScreen.classList.add('fade-in');
+  board = Array(9).fill('');
+  gameOver = false;
+  statusEl.textContent = 'Твой ход';
+  statusEl.className = 'status';
+  renderBoard();
+}
+
+document.getElementById('pay-btn').onclick = () => {
+  const link = `https://t.me/${BOT_USERNAME}?start=pay`;
+  if (tg) tg.openTelegramLink(link);
+  else window.open(link, '_blank');
+};
+
+/* ---------- init ---------- */
+const params = new URLSearchParams(location.search);
+if (params.get('paid') === '1') {
+  // Админ подтвердил — даём сыграть 1 раз, потом счётчик опять станет 1
+  setPlays(0, () => {
+    history.replaceState({}, '', location.pathname);
+    getPlays(n => { plays = n; showPlayScreen(); });
+  });
+} else {
+  getPlays(n => {
+    plays = n;
+    // если играл хотя бы раз — показываем оплату, больше бесплатных попыток нет
+    plays >= 1 ? showPayScreen() : showPlayScreen();
+  });
+}
+</script>
+</body>
+</html>
